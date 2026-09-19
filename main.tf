@@ -23,13 +23,11 @@ module "keyvault" {
   source = "git::https://github.com/pchylak/global_azure_2026_ccoe.git?ref=keyvault/v1.0.0"
   keyvault_name = "gakvuser182026"
   resource_group = {
-    location = "northeurope"
-    name     = "rg-user18"
+    location = "centralpoland"
+    name     = "AzureGlobal"
   }
   network_acls = {
     bypass = "AzureServices"
   }
 
 }
-
-# module "keyvault" {
