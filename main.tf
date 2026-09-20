@@ -41,5 +41,10 @@ module "mssql_server" {
     name     = var.resource_group
   }
 
+  sql_server_admin = "ibrahim"
+
+  sql_server_name = "example-webapp-sql-server"
+
+  sql_server_version = "12.0"
 
 }
