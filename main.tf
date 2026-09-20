@@ -12,7 +12,7 @@ provider "azurerm" {
 
 terraform {
   backend "azurerm" {
-    resource_group_name  = var.resource_group
+    resource_group_name  = "AzureGlobal"
     storage_account_name = "tfstateblobstorage001"
     container_name       = "tfstate"
     key                  = "terraform.tfstate"
