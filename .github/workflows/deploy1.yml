@@ -66,7 +66,6 @@ jobs:
           docker --version
           find . -name Dockerfile
           ls
-          ls /src
           pwd
 
 
