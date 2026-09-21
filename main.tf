@@ -60,4 +60,17 @@ module "application_insights" {
   }
 }
 
-## Redeploy Infrastructure
+module "managed_identity" {
+  source = "git::https://github.com/pchylak/global_azure_2026_ccoe.git?ref=managed_identity/v1.0.0"
+  # also any inputs for the module (see below)
+  name = "example-webapp-mi"
+  resource_group = {
+    location = var.location
+    name     = var.resource_group
+  }
+
+  permissions = {
+    scope = "/subscriptions/8c019dba-0d3c-4974-b897-c01b236aeb6e/resourceGroups/AzureGlobal/providers/Microsoft.ContainerRegistry/registries/azureglobal"
+    role_name = "AcrPull"
+  }
+}
