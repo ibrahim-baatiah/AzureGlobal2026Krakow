@@ -97,7 +97,6 @@ module "app_service" {
   app_settings = {
     "ApplicationInsights__ConnectionString" = module.application_insights.connection_string
     "WEBSITES_PORT" = "8080"
-    "DOCKER_REGISTRY_SERVER_URL" = "https://azureglobal.azurecr.io"
   }
   identity_client_id = module.managed_identity.managed_identity_client_id
   identity_id = module.managed_identity.managed_identity_id
