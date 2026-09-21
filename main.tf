@@ -93,9 +93,9 @@ module "service_plan" {
 module "app_service" {
   source = "git::https://github.com/pchylak/global_azure_2026_ccoe.git?ref=app_service/v1.0.0"
   app_service_name = "example-webapp-56456345645"
-  app_service_plan_id = module.service_plan.app_service_plan_id
+  app_service_plan_id = module.service_plan.app_service_plan.id
   app_settings = {
-    "ApplicationInsights__ConnectionString" = module.application_insights.app_insights_connection_string
+    "ApplicationInsights__ConnectionString" = module.application_insights.connection_string
     "WEBSITES_PORT" = "8080"
     "DOCKER_REGISTRY_SERVER_URL" = "https://azureglobal.azurecr.io"
   }
