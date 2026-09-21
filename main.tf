@@ -76,3 +76,17 @@ module "managed_identity" {
     }
   ]
 }
+
+module "service_plan" {
+  source = "git::https://github.com/pchylak/global_azure_2026_ccoe.git?ref=service_plan/v2.0.0"
+  # also any inputs for the module (see below)
+  app_service_plan_name = "example-webapp-sp"
+  resource_group = {
+    location = var.location
+    name     = var.resource_group 
+  }
+  sku_name = "F1"
+  tags = {
+    environment = "dev"
+  }
+}
