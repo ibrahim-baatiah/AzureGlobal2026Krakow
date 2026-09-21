@@ -69,8 +69,10 @@ module "managed_identity" {
     name     = var.resource_group
   }
 
-  permissions = {
-    scope = "/subscriptions/8c019dba-0d3c-4974-b897-c01b236aeb6e/resourceGroups/AzureGlobal/providers/Microsoft.ContainerRegistry/registries/azureglobal"
-    role_name = "AcrPull"
-  }
+  permissions = [
+    {
+      scope = "/subscriptions/8c019dba-0d3c-4974-b897-c01b236aeb6e/resourceGroups/AzureGlobal/providers/Microsoft.ContainerRegistry/registries/azureglobal"
+      role_name = "AcrPull"
+    }
+  ]
 }
