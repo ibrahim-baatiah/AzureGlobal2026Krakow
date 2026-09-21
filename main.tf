@@ -59,3 +59,5 @@ module "application_insights" {
     name     = var.resource_group
   }
 }
+
+## Redeploy Infrastructure
