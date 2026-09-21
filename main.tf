@@ -79,7 +79,6 @@ module "managed_identity" {
 
 module "service_plan" {
   source = "git::https://github.com/pchylak/global_azure_2026_ccoe.git?ref=service_plan/v2.0.0"
-  # also any inputs for the module (see below)
   app_service_plan_name = "example-webapp-sp"
   resource_group = {
     location = var.location
@@ -89,4 +88,22 @@ module "service_plan" {
   tags = {
     environment = "dev"
   }
+}
+
+module "app_service" {
+  source = "git::https://github.com/pchylak/global_azure_2026_ccoe.git?ref=app_service/v1.0.0"
+  app_service_name = "example-webapp-56456345645"
+  app_service_plan_id = module.service_plan.app_service_plan_id
+  app_settings = {
+    "ApplicationInsights__ConnectionString" = module.application_insights.app_insights_connection_string
+    "WEBSITES_PORT" = "8080"
+    "DOCKER_REGISTRY_SERVER_URL" = "https://azureglobal.azurecr.io"
+  }
+  identity_client_id = module.managed_identity.managed_identity_client_id
+  identity_id = module.managed_identity.managed_identity_id
+  resource_group = {
+    location = var.location
+    name     = var.resource_group
+  }
+  always_on = false
 }
