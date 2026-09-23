@@ -1,241 +1,114 @@
-# Azure Global 2026 Krakow Workshop
-Materials for workshop that happend 16.04.2026 in Krakow under Global Azure 2026 by [Dominik Skowron](https://www.linkedin.com/in/dominikskowron007/) & [Damian Maczuga](https://www.linkedin.com/in/damianmaczuga/) & [Paweł Chylak](https://www.linkedin.com/in/pawel-chylak/)
+# Azure Global 2026 Kraków — Secure CI/CD to Azure
 
-![logo](./logo.png)
-Participants learned how to set up a fully automated, secure CI/CD pipeline for deploying a web application to Azure using **GitHub Actions** and **passwordless authentication via Federated Identity**.
+This repository contains my completed work from the **Global Azure 2026 Kraków** workshop (16.04.2026), led by Dominik Skowron, Damian Maczuga and Paweł Chylak. Forked from [donnik007/AzureGlobal2026Krakow](https://github.com/donnik007/AzureGlobal2026Krakow).
 
-## Key Topics Covered
-- Creating and configuring a GitHub repository
-- Setting up Azure resources:
-  - User Assigned Managed Identity
-  - Azure Blob Storage for Terraform state
-  - Azure Container Registry (ACR)
-  - Terraform Modules
-- Configuring GitHub Secrets for secure integration
-- Writing and deploying:
-  - `main.tf` (Terraform configuration)
-  - GitHub Actions workflow (`deploy.yml`)
-- **Passwordless authentication using OIDC federation** between GitHub and Azure
-- Secure infrastructure and app deployment using Infrastructure as Code (IaC)
+I built a fully automated CI/CD pipeline that containerizes a web application, provisions Azure infrastructure with Terraform, and deploys the app to Azure App Service. Every run authenticates to Azure **without a single stored password**, using OpenID Connect (OIDC) federation between GitHub and a Managed Identity.
 
-This workshop showcased best practices for modern DevOps workflows with **Terraform Modules**, **containerization**, and **secure CI/CD pipelines** on Azure
+## What I accomplished
 
-# Instruction
-## 1. Create Free GitHub Account
-    - Write down your user name
-    - Create empty repo with README.md file
-    - write down repo name
+- Set up a GitHub repository and connected it to an Azure resource group
+- Created a **User-Assigned Managed Identity** with a federated credential trusting this repo's `main` branch
+- Provisioned an **Azure Storage Account** as the remote backend for Terraform state
+- Created an **Azure Container Registry (ACR)** to host the application image
+- Applied least-privilege **RBAC role assignments** to the identity
+- Stored only non-secret identifiers as **GitHub Actions secrets**
+- Wrote the Terraform configuration (`main.tf`) and the GitHub Actions workflow (`.github/workflows/deploy.yml`)
+- Deployed successfully: every push to `main` now builds, provisions and releases automatically
 
-## 2. Log into Azure Account
-    - Find your Resource Group
+## Setup order
 
-## 3. Managed Identity
-    - Create User Assigned Managed Identity (in your Resource Group)
-    - <your-managed-Identity> -> Settings -> Federated credentials -> Add Credential:
-        - Federated credential scenario = GitHub Actions deploying...
-        - Organization = YOUR GH USERNAME
-        - Repository = YOUR GH REPO NAME
-        - Entity = Branch
-        - Branch = main
-        - Name credentials-name
-        
-    - Go to your Resource Group -> Access control (IAM) -> Add role assignment -> Privileged administrator roles -> Contributor -> Managed identity -> Your MI.
+The resources were created in a specific order, because each step depends on the one before it. The managed identity has to exist before it can be granted roles on the storage account and registry, and all Azure IDs must exist before they can be saved as GitHub secrets.
 
-## 4. Create Blob
-    - Create Azure Storage Account (for tfstate)
-    - In Azure Storage Account create blob named tfstate
-    - In Your Storage Account -> Access Control (IAM) -> Add+ -> Add role assignment -> Storage Blob Data Contributor -> Managed Idenity (+Select Member) -> your managed idenity
+![Setup order](images/01-setup-order.png)
 
-## 5. ACR
-    - in your RG create "Container registries"
-    - provide name, rest default -> create
-    - In ACR check in Admin User
-    - In Your ACR -> Access Control (IAM) -> Add+ -> Add role assignment -> AcrPush -> Managed Idenity (+Select Member) -> your managed idenity
+| Step | Where | What | Why |
+|------|-------|------|-----|
+| 1 | GitHub | Repository | Hosts code and runs the workflow |
+| 2 | Azure | Resource group | Container for all workshop resources |
+| 3 | Azure | Managed identity + federated credential | The identity the pipeline logs in as |
+| 4 | Azure | Storage account (`tfstate`) | Remote, shared Terraform state |
+| 5 | Azure | Container registry | Stores the Docker image |
+| 6 | GitHub | Repository secrets | Gives the workflow the IDs it needs |
+| 7 | GitHub | `main.tf` + `deploy.yml` | Infrastructure and pipeline as code |
 
-## 6. GH Secrets
-    - go to your GH Repo
-    - Settings
-    - Security / secrets and variables / actions
-    - new repository Secret (and create with name:value)
-        - ACR_LOGIN_SERVER (from your ACR overview)
-        - AZURE_CLIENT_ID (from your MI overview)
-        - AZURE_SUBSCRIPTION_ID (from your MI overview)
-        - AZURE_TENANT_ID (from your MI Settings -> Properties)
+## Reference architecture
 
-## 7. Let's Code!
-- create files:
-    - main.tf
-    - .github/workflows/deploy.yml
+![Reference architecture](images/02-reference-architecture.png)
 
-## main.tf
+A push to `main` triggers the workflow. The workflow logs in as the managed identity, pushes the image to ACR, runs Terraform (keeping its state in blob storage), and finally points the App Service at the new image. The App Service then pulls that image from ACR and runs it.
+
+## Passwordless authentication (OIDC)
+
+![OIDC authentication](images/03-oidc-authentication.png)
+
+Instead of storing a service principal secret, the workflow requests a short-lived token from GitHub (enabled by `permissions: id-token: write`). Microsoft Entra ID checks that the token's issuer, subject (`repo:<user>/<repo>:ref:refs/heads/main`) and audience match the federated credential on the managed identity. If they match, the workflow receives an Azure access token scoped to the roles below.
+
+### Role assignments on the managed identity
+
+| Scope | Role | Used for |
+|-------|------|----------|
+| Resource group | Contributor | Terraform creating and updating resources |
+| Storage account | Storage Blob Data Contributor | Reading and writing `terraform.tfstate` |
+| Container registry | AcrPush | Pushing the Docker image |
+
+### GitHub secrets
+
+| Secret | Source |
+|--------|--------|
+| `AZURE_CLIENT_ID` | Managed identity overview |
+| `AZURE_TENANT_ID` | Managed identity → Settings → Properties |
+| `AZURE_SUBSCRIPTION_ID` | Managed identity overview |
+| `ACR_LOGIN_SERVER` | Container registry overview |
+
+None of these are passwords. On their own they grant no access; access only works for a token issued to this repository's `main` branch.
+
+## CI/CD pipeline
+
+![Pipeline jobs](images/04-pipeline-jobs.png)
+
+The workflow in `.github/workflows/deploy.yml` has three jobs chained with `needs:`, so each only starts after the previous one succeeds.
+
+1. **build-and-push** — checks out the code, logs into Azure and ACR, builds the Docker image and pushes it as `example-webapp:latest`.
+2. **deploy-infra** — sets the `ARM_*` environment variables with `ARM_USE_OIDC=true`, installs Terraform 1.5.0, then runs `terraform init`, `plan` and `apply -auto-approve` against the remote state backend.
+3. **update-app-service** — logs into Azure and runs `az webapp config container set` to point the App Service at the latest image in ACR.
+
+## Repository structure
+
+```
+.
+├── .github/
+│   └── workflows/
+│       └── deploy.yml     # CI/CD pipeline
+├── images/                # Illustrations used in this README
+├── src/                   # Application source and Dockerfile
+├── main.tf                # Terraform configuration and azurerm backend
+├── variables.tf           # Terraform variables
+└── README.md
+```
+
+## Terraform backend
+
+State is stored remotely so that every pipeline run sees the same infrastructure:
+
 ```hcl
 terraform {
-  required_providers {
-    azurerm = {
-      source  = "hashicorp/azurerm"
-      version = "=4.1.0"
-    }
-  }
-}
-provider "azurerm" {
-  features {}
-}
-
-terraform {
   backend "azurerm" {
-    resource_group_name  = "example-resources" #change here
-    storage_account_name = "tfstorage123dominik" #change here
+    resource_group_name  = "<your-resource-group>"
+    storage_account_name = "<your-storage-account>"
     container_name       = "tfstate"
     key                  = "terraform.tfstate"
   }
 }
-
-```
-## .github/workflows/deploy.yml
-```yml
-name: CI/CD Pipeline
-
-permissions:
-  id-token: write
-  contents: read
-
-on:
-  push:
-    branches:
-      - main
-  
-jobs:
-  build-and-push:
-    name: Build and Push Docker Image
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v3
-
-      - name: 'Azure login'
-        uses: azure/login@v1
-        with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}  
-
-      - name: Login to Azure Container Registry
-        run: az acr login --name ${{ secrets.ACR_LOGIN_SERVER }}
-
-      - name: Build Docker Image
-        run: |
-          docker build -t ${{ secrets.ACR_LOGIN_SERVER }}/example-webapp:latest .
-
-      - name: Push Docker Image to ACR
-        run: |
-          docker push ${{ secrets.ACR_LOGIN_SERVER }}/example-webapp:latest
-
-  deploy-infra:
-    name: Deploy Infrastructure
-    runs-on: ubuntu-latest
-    needs: build-and-push
-
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v3
-
-      - name: set-variables
-        shell: 'pwsh'
-        run: |
-          @("ARM_CLIENT_ID=${{ secrets.AZURE_CLIENT_ID }}",
-            "ARM_SUBSCRIPTION_ID=${{ secrets.AZURE_SUBSCRIPTION_ID }}",
-            "ARM_TENANT_ID=${{ secrets.AZURE_TENANT_ID }}",
-            "ARM_USE_OIDC=true",
-            "ARM_USE_AZUREAD=true") | Out-File -FilePath $env:GITHUB_ENV -Append
-
-      - name: Set up Terraform
-        uses: hashicorp/setup-terraform@v2
-        with:
-          terraform_version: 1.5.0
-
-      - name: Initialize Terraform
-        shell: 'pwsh'
-        run: terraform init
-
-      - name: Plan Terraform Changes
-        shell: 'pwsh'
-        run: terraform plan
-
-      - name: Apply Terraform Changes
-        shell: 'pwsh'
-        run: terraform apply -auto-approve
-
-  update-app-service:
-    name: Update App Service with Latest Image
-    runs-on: ubuntu-latest
-    needs: deploy-infra
-
-    steps:
-      - name: 'Azure login'
-        uses: azure/login@v1
-        with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-        
-      - name: Update App Service
-        run: |
-          az webapp config container set \
-            --name example-webapp-123123i95u8fhwfdsewdwsa \
-            --resource-group example-resources \
-            --docker-custom-image-name ${{ secrets.ACR_LOGIN_SERVER }}/example-webapp:latest \
-            --docker-registry-server-url https://${{ secrets.ACR_LOGIN_SERVER }}
 ```
 
-# Linki
-https://dev.azure.com/globalazure2026krk/
+## Key takeaways
 
-https://portal.azure.com/
+- **No long-lived secrets.** OIDC federation removes the risk of leaked client secrets and the chore of rotating them.
+- **Least privilege.** The identity only has the roles each job actually needs.
+- **Infrastructure as Code.** The environment is reproducible from the repository; the Azure portal is only for verification and debugging.
+- **Remote state.** Terraform state in blob storage keeps runs consistent and safe.
+- **Ordered, gated deployment.** The image exists before infrastructure is applied, and infrastructure exists before the app is updated.
 
-https://github.com/pchylak/global_azure_2026_ccoe
+## Credits
 
-
-# Nagrody
-
-Każdy kto wykona wszystkie zadania bierze udział w losowaniu nagrody główniej.
-Pierwsze X osób które wykonają najszybciej zadania wybierają nagrody z sejfu
-
-# Zadania
-
-- Wstęp Teoretyczny
-- Architecture Overview
-<img width="800" height="533" alt="image" src="https://github.com/user-attachments/assets/4d2f6f47-54af-4271-9b06-ad5a36924a68" />
-
-- Zaloguj się do Azure portal
-    - znajdź swoją resource group
-- Zaimportuj twoją resource group (userX) do terraform (1 pkt)
-- Zrób Connection dla twojej resource groupy (pomiędzy GitHub a Azurem) (1 pkt)
-- Stwórz GitHub Action pod deployment Terraforma (Terraform INIT + PLAN + APPLY) (1 pkt)
-    - możesz wykorzystać TerraformTaskV4@4
-    - skonfiguruj backend/config dla terraforma
-- Zrób Deploy zasobów zgodnie z architekturą:
-    - skorzystaj z modułów https://github.com/pchylak/global_azure_2026_ccoe
-    - instrukcja skorzystania z modułów jest w sekji wiki
-    - zasoby do powołania:
-        - Managed Identity (1 pkt)
-        - Key Vault (1 pkt)
-        - MS SQL (1 pkt)
-        - Application Insights (1 pkt)
-        - App Service Plan (b1) (1 pkt)
-        - Azure App Service (1 pkt)
-        - Azure Container Registry (1 pkt)
-- Zamontuj Pipeline pod deployment aplikacji
-    - Docker Build (1 pkt)
-    - Docker Push to ACR (Azure Container Registry) (1 pkt)
-- Rozszerz pipeline o deploy na powołany Azure App Service (1 pkt)
-    - możesz użyć do tego AzureWebAppContainer@1
-- Uzupełnij zmienne środowiskowe dla aplikacji aby wyświetlała pełnie funkcjonalności (1 pkt)
-    - ENV za pomocą terraform
-    - pamiętaj, że jeżeli zmienna jest sekretem możesz wykorzystać Key Vault
-
-# Wskazówki
-- pamiętaj, że Managed Idenitiy z którego będzie korzystała twoja aplikacja musi być do niej przypisane i posiadać odpowiednie role do "komunikacji" z SQL, KV etc
-- sekrety przechowuj w KeyVault
-- ręczne klikanie w portal Azure = tylko do weryfikacji / debug
-- infrastruktura powinna być odtwarzalna z kodu
+Workshop materials by [Dominik Skowron](https://www.linkedin.com/in/dominikskowron007/), [Damian Maczuga](https://www.linkedin.com/in/damianmaczuga/) and [Paweł Chylak](https://www.linkedin.com/in/pawel-chylak/) for Global Azure 2026 Kraków. Terraform modules: [pchylak/global_azure_2026_ccoe](https://github.com/pchylak/global_azure_2026_ccoe).
